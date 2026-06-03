@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scorecard — Carbay Credit Analysis</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap');
+:root {
+  --bg: #0a0a0f;
+  --surface: #13131a;
+  --surface2: #1c1c28;
+  --border: #2a2a3a;
+  --accent: #6c63ff;
+  --accent2: #ff6584;
+  --accent3: #43e97b;
+  --amber: #f7b731;
+  --text: #e8e8f0;
+  --muted: #7a7a9a;
+  --reject: #ff6584;
+  --pass: #43e97b;
+  --pending: #f7b731;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Syne', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* ── HEADER ── */
+header { padding: 28px 40px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.header-left h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+.header-left p { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+/* ── NAV ── */
+.tab-nav { display: flex; gap: 4px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
+.tab-btn { font-family: 'DM Mono', monospace; font-size: 12px; background: none; border: none; color: var(--muted); padding: 7px 14px; border-radius: 7px; cursor: pointer; transition: all .15s; white-space: nowrap; }
+.tab-btn.active { background: var(--accent); color: #fff; font-weight: 600; }
+.tab-btn:hover:not(.active) { color: var(--text); }
+
+/* ── MAIN LAYOUT ── */
+main { padding: 32px 40px; max-width: 1400px; }
+
+/* ── UPLOAD SECTION ── */
+.upload-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+.upload-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.upload-card h3 { font-family: 'DM Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 12px; }
+.upload-card .section-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 600; margin-bottom: 14px; }
+.badge-pef { background: rgba(13,94,110,.25); color: #4fc3f7; border: 1px solid rgba(13,94,110,.5); }
+.badge-hs  { background: rgba(45,106,45,.25); color: #43e97b; border: 1px solid rgba(45,106,45,.5); }
+.badge-dvf { background: rgba(27,58,107,.25); color: #a29bfe; border: 1px solid rgba(27,58,107,.5); }
+
+.drop-zone { border: 1.5px dashed var(--border); border-radius: 10px; padding: 24px 16px; text-align: center; cursor: pointer; transition: all .2s; position: relative; }
+.drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); background: rgba(108,99,255,.05); }
+.drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.drop-zone .dz-icon { font-size: 28px; margin-bottom: 8px; }
+.drop-zone p { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); }
+.drop-zone .file-name { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--accent3); margin-top: 6px; display: none; }
+.drop-zone.has-file { border-color: var(--accent3); }
+.drop-zone.has-file .file-name { display: block; }
+.drop-zone.has-file p { display: none; }
+
+/* ── APP ID ROW ── */
+.appid-row { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 24px; }
+.appid-row .field { flex: 1; }
+.appid-row label { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); display: block; margin-bottom: 6px; }
+.appid-row input { width: 100%; font-family: 'DM Mono', monospace; font-size: 13px; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 10px 14px; border-radius: 8px; outline: none; transition: border-color .2s; }
+.appid-row input:focus { border-color: var(--accent); }
+
+.btn-generate { font-family: 'DM Mono', monospace; font-size: 13px; background: var(--accent); border: none; color: #fff; padding: 10px 28px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: opacity .2s; white-space: nowrap; }
+.btn-generate:hover { opacity: .85; }
+.btn-generate:disabled { opacity: .4; cursor: default; }
+
+/* ── PROGRESS ── */
+.progress-bar { height: 3px; background: var(--border); border-radius: 2px; margin-bottom: 24px; overflow: hidden; display: none; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent3)); border-radius: 2px; transition: width .3s; width: 0%; }
+
+/* ── RESULT CARD ── */
+.result-section { display: none; }
+.result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+.result-title { font-size: 16px; font-weight: 700; }
+.btn-download { font-family: 'DM Mono', monospace; font-size: 12px; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 8px 16px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: border-color .2s; }
+.btn-download:hover { border-color: var(--accent3); color: var(--accent3); }
+
+.result-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+.r-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+.r-card-label { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 8px; }
+.r-card-val { font-size: 22px; font-weight: 800; }
+.r-card-sub { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+/* ── DATA TABLE ── */
+.data-sections { display: flex; flex-direction: column; gap: 16px; }
+.data-section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.data-section-hdr { padding: 12px 18px; font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .7px; }
+.hdr-dvf  { background: #1B3A6B; color: #a8c4f5; }
+.hdr-pef  { background: #0D5E6E; color: #7de0f0; }
+.hdr-hs   { background: #2D6A2D; color: #8de8a0; }
+.data-section table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.data-section td { padding: 9px 18px; border-bottom: 1px solid var(--border); color: var(--text); font-family: 'DM Mono', monospace; font-size: 11px; vertical-align: top; }
+.data-section td:first-child { color: var(--muted); width: 220px; white-space: nowrap; }
+.data-section tr:last-child td { border-bottom: none; }
+.data-section tr:hover td { background: var(--surface2); }
+
+/* ── VERDICT BANNER ── */
+.verdict { border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; display: flex; align-items: center; gap: 14px; }
+.verdict.reject { background: rgba(255,101,132,.1); border: 1px solid rgba(255,101,132,.35); }
+.verdict.pass   { background: rgba(67,233,123,.1); border: 1px solid rgba(67,233,123,.35); }
+.verdict-icon { font-size: 28px; }
+.verdict-label { font-size: 18px; font-weight: 800; }
+.verdict.reject .verdict-label { color: var(--reject); }
+.verdict.pass   .verdict-label { color: var(--pass); }
+.verdict-reason { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+/* ── BADGE ── */
+.pill { display: inline-block; padding: 3px 10px; border-radius: 20px; font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+.pill-reject { background: rgba(255,101,132,.15); color: var(--reject); border: 1px solid rgba(255,101,132,.3); }
+.pill-pass   { background: rgba(67,233,123,.15); color: var(--pass); border: 1px solid rgba(67,233,123,.3); }
+.pill-pos    { background: rgba(67,233,123,.15); color: var(--pass); border: 1px solid rgba(67,233,123,.3); }
+.pill-neg    { background: rgba(255,101,132,.15); color: var(--reject); border: 1px solid rgba(255,101,132,.3); }
+
+/* ── ERROR ── */
+.error-box { background: rgba(255,101,132,.08); border: 1px solid rgba(255,101,132,.3); border-radius: 10px; padding: 14px 18px; font-family: 'DM Mono', monospace; font-size: 12px; color: var(--reject); margin-bottom: 16px; display: none; }
+
+/* ── STATUS DOTS ── */
+.file-status { display: flex; gap: 8px; margin-top: 8px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
+.dot.ready { background: var(--accent3); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <h1>📝 Credit Scorecard</h1>
+    <p>Upload Pefindo + Home Survey + DVF → Generate scorecard otomatis</p>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <div class="tab-nav">
+      <button class="tab-btn" onclick="window.location.href='index.html'">📊 Portfolio</button>
+      <button class="tab-btn" onclick="window.location.href='index.html'">📋 Logbook</button>
+      <button class="tab-btn active">📝 Scorecard</button>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- APP ID INPUT -->
+  <div class="appid-row">
+    <div class="field">
+      <label>App ID / Dealer ID</label>
+      <input type="text" id="appIdInput" placeholder="contoh: AI02052312111300001 atau OX05072415164401364" />
+    </div>
+    <button class="btn-generate" id="btnGenerate" onclick="generateScorecard()" disabled>
+      ⚡ Generate Scorecard
+    </button>
+  </div>
+
+  <!-- UPLOAD CARDS -->
+  <div class="upload-grid">
+
+    <!-- PEFINDO -->
+    <div class="upload-card">
+      <span class="section-badge badge-pef">PEFINDO IdScore+</span>
+      <div class="drop-zone" id="dropPef" ondragover="onDrag(event,'dropPef')" ondragleave="offDrag('dropPef')" ondrop="onDrop(event,'pefindo')">
+        <input type="file" accept=".pdf" onchange="handleFile(event,'pefindo')" />
+        <div class="dz-icon">📄</div>
+        <p>Drop file PDF Pefindo di sini<br>atau klik untuk pilih file</p>
+        <div class="file-name" id="namePef">—</div>
+      </div>
+    </div>
+
+    <!-- HOME SURVEY -->
+    <div class="upload-card">
+      <span class="section-badge badge-hs">Home Survey (GSI)</span>
+      <div class="drop-zone" id="dropHs" ondragover="onDrag(event,'dropHs')" ondragleave="offDrag('dropHs')" ondrop="onDrop(event,'homesurvey')">
+        <input type="file" accept=".pdf" onchange="handleFile(event,'homesurvey')" />
+        <div class="dz-icon">🏠</div>
+        <p>Drop file PDF Home Survey di sini<br>atau klik untuk pilih file</p>
+        <div class="file-name" id="nameHs">—</div>
+      </div>
+    </div>
+
+    <!-- DVF -->
+    <div class="upload-card">
+      <span class="section-badge badge-dvf">DVF — Dealer Survey</span>
+      <div class="drop-zone" id="dropDvf" ondragover="onDrag(event,'dropDvf')" ondragleave="offDrag('dropDvf')" ondrop="onDrop(event,'dvf')">
+        <input type="file" accept=".pdf,.csv,.xlsx" onchange="handleFile(event,'dvf')" />
+        <div class="dz-icon">🏢</div>
+        <p>Drop file DVF (PDF/CSV) di sini<br>atau klik untuk pilih file</p>
+        <div class="file-name" id="nameDvf">—</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- PROGRESS -->
+  <div class="progress-bar" id="progressBar">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+
+  <!-- ERROR -->
+  <div class="error-box" id="errorBox"></div>
+
+  <!-- RESULT -->
+  <div class="result-section" id="resultSection">
+
+    <!-- VERDICT -->
+    <div class="verdict" id="verdictBanner">
+      <div class="verdict-icon" id="verdictIcon">—</div>
+      <div>
+        <div class="verdict-label" id="verdictLabel">—</div>
+        <div class="verdict-reason" id="verdictReason">—</div>
+      </div>
+      <div style="margin-left:auto">
+        <button class="btn-download" onclick="downloadExcel()">
+          ⬇ Download Excel
+        </button>
+      </div>
+    </div>
+
+    <!-- KPI CARDS -->
+    <div class="result-grid" id="kpiCards"></div>
+
+    <!-- DATA SECTIONS -->
+    <div class="data-sections">
+
+      <div class="data-section">
+        <div class="data-section-hdr hdr-dvf">DVF — Dealer Field Visit</div>
+        <table id="tblDvf"></table>
+      </div>
+
+      <div class="data-section">
+        <div class="data-section-hdr hdr-pef">PEFINDO — Credit Scoring</div>
+        <table id="tblPef"></table>
+      </div>
+
+      <div class="data-section">
+        <div class="data-section-hdr hdr-hs">Home Survey — Residence Verification</div>
+        <table id="tblHs"></table>
+      </div>
+
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────────
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const files = { pefindo: null, homesurvey: null, dvf: null };
+let extractedData = {};
+
+// ── FILE HANDLING ──────────────────────────────────────────────
+function handleFile(e, type) {
+  const file = e.target.files[0];
+  if (!file) return;
+  setFile(type, file);
+}
+
+function onDrag(e, id) { e.preventDefault(); document.getElementById(id).classList.add('dragover'); }
+function offDrag(id) { document.getElementById(id).classList.remove('dragover'); }
+function onDrop(e, type) {
+  e.preventDefault();
+  const id = type === 'pefindo' ? 'dropPef' : type === 'homesurvey' ? 'dropHs' : 'dropDvf';
+  offDrag(id);
+  const file = e.dataTransfer.files[0];
+  if (file) setFile(type, file);
+}
+
+function setFile(type, file) {
+  files[type] = file;
+  const nameMap = { pefindo: 'namePef', homesurvey: 'nameHs', dvf: 'nameDvf' };
+  const dropMap = { pefindo: 'dropPef', homesurvey: 'dropHs', dvf: 'dropDvf' };
+  document.getElementById(nameMap[type]).textContent = '✓ ' + file.name;
+  document.getElementById(dropMap[type]).classList.add('has-file');
+  checkReady();
+}
+
+function checkReady() {
+  const appId = document.getElementById('appIdInput').value.trim();
+  const ready = appId && files.pefindo && files.homesurvey && files.dvf;
+  document.getElementById('btnGenerate').disabled = !ready;
+}
+
+document.getElementById('appIdInput').addEventListener('input', checkReady);
+
+// ── PDF TEXT EXTRACTION ────────────────────────────────────────
+async function extractPdfText(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let text = '';
+  const maxPages = Math.min(pdf.numPages, 20);
+  for (let i = 1; i <= maxPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map(s => s.str).join(' ') + '\n';
+  }
+  return text;
+}
+
+// ── PROGRESS HELPER ────────────────────────────────────────────
+function setProgress(pct, show = true) {
+  const bar = document.getElementById('progressBar');
+  const fill = document.getElementById('progressFill');
+  bar.style.display = show ? 'block' : 'none';
+  fill.style.width = pct + '%';
+}
+
+function showError(msg) {
+  const box = document.getElementById('errorBox');
+  box.textContent = '⚠ ' + msg;
+  box.style.display = 'block';
+}
+
+// ── PEFINDO PARSER ─────────────────────────────────────────────
+function parsePefindo(text) {
+  const get = (patterns) => {
+    for (const p of patterns) {
+      const m = text.match(p);
+      if (m) return m[1].trim();
+    }
+    return '-';
+  };
+
+  const name = get([/IdScore\+\s*\n([A-Z\s]+)\nKTP/]);
+  const dob  = get([/Tanggal Lahir\s+([\d]+ \w+ \d+)/]);
+  const age  = get([/Tanggal Lahir[\s\S]*?\((\d+) tahun\)/]);
+  const marriage = text.match(/Menikah/) ? 'Married' : text.match(/Belum Menikah/) ? 'Single' : '-';
+
+  // Payment calendar — last known month
+  const calMatch = text.match(/(\d{4})\s+([\d\s|n\/a]+(?:\n[\d\s|n\/a]+)*)/);
+  
+  // Current coll & DPD from payment calendar last entry
+  let currentColl = '-', currentDpd = '-', highestCollL24M = 1, highestDpdL24M = 0;
+  const calRows = [...text.matchAll(/(\d{4})\s+([\d ]+\|\s*[\d ]+(?:\s+[\d ]+\|\s*[\d n\/a]+)*)/g)];
+  if (calRows.length) {
+    // parse last year's entries
+    const entries = [...text.matchAll(/(\d+)\s*\|\s*(\d+)/g)];
+    if (entries.length) {
+      const last = entries[entries.length - 1];
+      currentColl = parseInt(last[1]) || 1;
+      currentDpd  = parseInt(last[2]) || 0;
+      highestCollL24M = Math.max(...entries.slice(-24).map(e => parseInt(e[1]) || 1));
+      highestDpdL24M  = Math.max(...entries.slice(-24).map(e => parseInt(e[2]) || 0));
+    }
+  }
+
+  // Overdue & outstanding
+  const totalOs    = get([/Total nilai saldo terutang\s+Rp\.\s+([\d.,]+)/]);
+  const totalOverdue = get([/Jumlah nilai tunggakan\s+Rp\.\s+([\d.,]+)/]);
+  const overdueDays  = get([/Jumlah hari tunggakan\s+(\d+)/]);
+  const score        = get([/Skor\s+(\d+)\s+Kategori/]);
+  const activeContracts = get([/Jumlah kontrak aktif\s+(\d+)/]);
+  const closedContracts = get([/Jumlah kontrak ditutup\s+(\d+)/]);
+  const inquiries    = get([/Jumlah permintaan dalam 12 bulan terakhir\s+(\d+)/]);
+
+  // Value open/closed loans in millions
+  const osMillion = totalOs !== '-' ? (parseFloat(totalOs.replace(/[.,]/g, '').replace(',','.'))/1e6).toFixed(1) : '-';
+  const overdueMillion = totalOverdue !== '-' ? (parseFloat(totalOverdue.replace(/[.,]/g, ''))/1e6).toFixed(2) : '0';
+
+  // Has housing loan (KPR)
+  const hasKpr = /KPR|Kredit Pemilikan Rumah/i.test(text) ? 'Yes' : 'No';
+  // Automotive DPD
+  const autoMatch = text.match(/(?:KPM|kendaraan|Automotive|Adira|BFI|CIMB Niaga Auto|OTO Finance)[\s\S]{0,200}(\d+) hari/i);
+  const everDpdAuto = autoMatch ? 'Yes' : 'No';
+  const highestDpdAuto = autoMatch ? parseInt(autoMatch[1]) : 0;
+
+  // PEFINDO result logic
+  let result = 'PASS';
+  let remarks = '';
+  const overdueJuta = parseFloat(overdueMillion) || 0;
+
+  if (currentColl >= 2 && text.match(/modal kerja|working capital|PRK|KMK/i)) {
+    result = 'AUTO REJECT'; remarks = 'R1: Active WC loan Coll ≥ 2.';
+  }
+  if (overdueJuta > 50) {
+    result = 'AUTO REJECT'; remarks += (remarks?' | ':'') + `R2: Overdue aktif Rp${overdueJuta}jt > 50jt.`;
+  } else if (overdueJuta > 30) {
+    const closedBig = /Rp\. [23456789]\.\d{3}\.\d{3}\.\d{3}/.test(text);
+    if (!closedBig) { result = 'AUTO REJECT'; remarks += (remarks?' | ':'') + `R2: Overdue Rp${overdueJuta}jt > 30jt (no closed loan >2M exception).`; }
+    else remarks += 'R2: Overdue 30-50jt tapi closed loan >2M → Pass exception.';
+  }
+  if (!remarks && result === 'PASS') remarks = `Coll ${currentColl} DPD ${currentDpd}hr. Score ${score}.`;
+
+  return {
+    name, age, marriage,
+    currentColl, currentDpd, highestCollL24M, highestDpdL24M,
+    valueOpenLoan: osMillion,
+    valueClosedLoan: '-',
+    hasHousingLoan: hasKpr,
+    everDpdAuto, highestDpdAutoL12m: highestDpdAuto,
+    bureauInquiries: inquiries,
+    prematureWcLoan: 'No',
+    bureauScore: score,
+    amountOverdue: overdueMillion,
+    pefindoResult: result,
+    pefindoRemarks: remarks,
+    activeContracts, closedContracts
+  };
+}
+
+// ── HOME SURVEY PARSER ─────────────────────────────────────────
+function parseHomeSurvey(text) {
+  const get = (patterns, fallback = '-') => {
+    for (const p of patterns) {
+      const m = text.match(p);
+      if (m) return (m[1] || '').trim();
+    }
+    return fallback;
+  };
+
+  // Ownership
+  const rawOwn = get([/(?:Status|Kepemilikan)[^:]*:\s*(Milik Sendiri|Sewa|Kontrak|Menumpang)/i,
+                      /milik sendiri/i, /sewa/i]);
+  let ownership = '-';
+  if (/milik sendiri/i.test(rawOwn) || /milik sendiri/i.test(text)) ownership = 'Owned by Applicant';
+  else if (/sewa/i.test(rawOwn) || /sewa/i.test(text)) ownership = 'Rented';
+  else if (/kontrak/i.test(text)) ownership = 'Contract';
+
+  // Length of stay — from notes
+  let los = 1;
+  const losMatch = text.match(/(\d+)\s*tahun/i);
+  if (losMatch) los = parseInt(losMatch[1]);
+  else if (/minggu|week/i.test(text)) los = 1;
+  else if (/bulan|month/i.test(text)) { const bm = text.match(/(\d+)\s*bulan/i); los = bm ? Math.max(1, Math.round(parseInt(bm[1])/12)) : 1; }
+
+  // Sources — count si1/si2/si3 that confirmed
+  const siMatches = [...text.matchAll(/si\d[\s\S]{0,300}(?:mengenal|membenarkan|konfirmasi|mengetahui|recognize|confirm)/gi)];
+  const knownBy = siMatches.length || (text.match(/si[123]/gi) || []).length;
+
+  // Validity
+  const validity = text.match(/Positif|Positive|dikenal|Address found/i) ? 'Positive' : 'Negative';
+
+  // Trigger date
+  const dateMatch = text.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/) ||
+                    text.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  const triggerDate = dateMatch ? dateMatch[0] : '-';
+
+  // App ID from title
+  const appIdMatch = text.match(/(OX\d+|AI\d+)/);
+  const surveyAppId = appIdMatch ? appIdMatch[1] : '-';
+
+  // Remarks — extract Notes field
+  const notesMatch = text.match(/(?:Notes|Catatan)[^:]*:\s*([\s\S]{20,400}?)(?=\n\n|\nGlobal|\nDokumen|$)/i);
+  const remarks = notesMatch ? notesMatch[1].replace(/\s+/g,' ').trim() : 'Address found. See document for details.';
+
+  return { homeOwnership: ownership, lengthOfStay: los, knownBySources: Math.max(1, knownBy), 
+           hsRemarks: remarks, validityStatus: validity, surveyTriggerDate: triggerDate, surveyAppId };
+}
+
+// ── DVF PARSER ─────────────────────────────────────────────────
+function parseDvf(text) {
+  const get = (patterns, fallback = '-') => {
+    for (const p of patterns) { const m = text.match(p); if (m) return (m[1]||'').trim(); }
+    return fallback;
+  };
+
+  const visitDate   = get([/Tanggal Visit\s+([\d\/\-\s:]+)/i, /(\d{1,2}\/\d{1,2}\/\d{4})/]);
+  const dealerName  = get([/Nama Dealer\s+([^\n]+)/i]);
+  const lamaUsaha   = get([/Lama Usaha dalam Tahun\s+(\d+)/i]);
+  const stock       = get([/Stock In Hand\s+(\d+)/i]);
+  const parkir      = get([/Kapasitas Parkir\s+(\d+)/i]);
+  const kepemilikan = get([/Kepemilikan Lokasi Dealer\s+([^\n]+)/i]);
+  const avgPenjualan = get([/Rata-rata Penjualan[^\n]*\s+(\d+)/i]);
+  const lokasi      = get([/Lokasi Dealer\s+([^\n]+)/i]);
+  const bmName      = get([/Nama BM[^\n]*\s+([^\n]+)/i]);
+
+  // DVF result heuristic
+  let dvfResult = 'Positive';
+  if (!dealerName || dealerName === '-') dvfResult = 'Inconclusive';
+
+  return { dvfVisitDate: visitDate, dealerName, lamaUsaha, stockInHand: stock,
+           kapasitasParkir: parkir, kepemilikanLokasi: kepemilikan,
+           avgPenjualan, lokasiDealer: lokasi, dvfSurveyResult: dvfResult, bm: bmName };
+}
+
+// ── GENERATE SCORECARD ─────────────────────────────────────────
+async function generateScorecard() {
+  const appId = document.getElementById('appIdInput').value.trim();
+  document.getElementById('errorBox').style.display = 'none';
+  document.getElementById('resultSection').style.display = 'none';
+  setProgress(10);
+
+  try {
+    // Extract Pefindo
+    setProgress(20);
+    const pefText = await extractPdfText(files.pefindo);
+    const pef = parsePefindo(pefText);
+    setProgress(45);
+
+    // Extract Home Survey
+    const hsText = await extractPdfText(files.homesurvey);
+    const hs = parseHomeSurvey(hsText);
+    setProgress(65);
+
+    // Extract DVF
+    const dvfText = await extractPdfText(files.dvf);
+    const dvf = parseDvf(dvfText);
+    setProgress(85);
+
+    // Merge
+    extractedData = { appId, ...dvf, ...pef, ...hs };
+
+    // Render
+    renderResult(extractedData);
+    setProgress(100);
+    setTimeout(() => setProgress(0, false), 500);
+
+  } catch (err) {
+    setProgress(0, false);
+    showError('Gagal memproses file: ' + err.message);
+    console.error(err);
+  }
+}
+
+// ── RENDER ─────────────────────────────────────────────────────
+function renderResult(d) {
+  const sec = document.getElementById('resultSection');
+  sec.style.display = 'block';
+
+  // Verdict
+  const banner = document.getElementById('verdictBanner');
+  const isReject = d.pefindoResult === 'AUTO REJECT';
+  banner.className = 'verdict ' + (isReject ? 'reject' : 'pass');
+  document.getElementById('verdictIcon').textContent = isReject ? '❌' : '✅';
+  document.getElementById('verdictLabel').textContent = isReject ? 'AUTO REJECT' : 'PASS';
+  document.getElementById('verdictReason').textContent = d.pefindoRemarks || '-';
+
+  // KPI cards
+  document.getElementById('kpiCards').innerHTML = `
+    <div class="r-card">
+      <div class="r-card-label">Bureau Score</div>
+      <div class="r-card-val" style="color:var(--accent)">${d.bureauScore || '-'}</div>
+      <div class="r-card-sub">PEFINDO IdScore+</div>
+    </div>
+    <div class="r-card">
+      <div class="r-card-label">Current Coll | DPD</div>
+      <div class="r-card-val" style="color:${(d.currentColl||1) >= 2 ? 'var(--reject)' : 'var(--pass)'}">
+        ${d.currentColl || '-'} | ${d.currentDpd ?? '-'}hr
+      </div>
+      <div class="r-card-sub">Collectibility saat ini</div>
+    </div>
+    <div class="r-card">
+      <div class="r-card-label">Home Survey</div>
+      <div class="r-card-val" style="color:${d.validityStatus==='Positive'?'var(--pass)':'var(--reject)'}">
+        ${d.validityStatus || '-'}
+      </div>
+      <div class="r-card-sub">Dikenal ${d.knownBySources || '-'} sumber</div>
+    </div>
+    <div class="r-card">
+      <div class="r-card-label">DVF Survey</div>
+      <div class="r-card-val" style="color:var(--pass)">${d.dvfSurveyResult || '-'}</div>
+      <div class="r-card-sub">Lama usaha ${d.lamaUsaha || '-'} tahun</div>
+    </div>
+  `;
+
+  // DVF table
+  renderTable('tblDvf', [
+    ['App ID', d.appId],
+    ['Dealer Name', d.dealerName],
+    ['DVF Visit Date', d.dvfVisitDate],
+    ['Lama Usaha', (d.lamaUsaha || '-') + ' tahun'],
+    ['Stock In Hand', d.stockInHand],
+    ['Kapasitas Parkir', d.kapasitasParkir],
+    ['Kepemilikan Lokasi', d.kepemilikanLokasi],
+    ['Avg Penjualan/Bulan', (d.avgPenjualan || '-') + ' unit'],
+    ['Lokasi Dealer', d.lokasiDealer],
+    ['BM / BRO', d.bm],
+    ['DVF Survey Result', d.dvfSurveyResult],
+  ]);
+
+  // Pefindo table
+  renderTable('tblPef', [
+    ['Name', d.name],
+    ['Age', d.age],
+    ['Marriage Status', d.marriage],
+    ['Current Collectibility', d.currentColl],
+    ['Current DPD', (d.currentDpd ?? '-') + ' hari'],
+    ['Highest Coll L24M', d.highestCollL24M],
+    ['Highest DPD L24M', (d.highestDpdL24M || 0) + ' hari'],
+    ['Value Open Loan', (d.valueOpenLoan || '-') + ' juta'],
+    ['Has Housing Loan', d.hasHousingLoan],
+    ['Ever DPD Automotive', d.everDpdAuto],
+    ['Bureau Inquiries L12M', d.bureauInquiries],
+    ['Bureau Score', d.bureauScore],
+    ['Amount Overdue', (d.amountOverdue || '0') + ' juta'],
+    ['Active Contracts', d.activeContracts],
+    ['Result', `<span class="pill ${d.pefindoResult==='AUTO REJECT'?'pill-reject':'pill-pass'}">${d.pefindoResult}</span>`],
+    ['Remarks', d.pefindoRemarks],
+  ]);
+
+  // Home Survey table
+  renderTable('tblHs', [
+    ['Home Ownership', d.homeOwnership],
+    ['Length of Stay', (d.lengthOfStay || '-') + ' tahun'],
+    ['Known by Sources', d.knownBySources + ' sumber'],
+    ['Validity Status', `<span class="pill ${d.validityStatus==='Positive'?'pill-pos':'pill-neg'}">${d.validityStatus}</span>`],
+    ['Survey Trigger Date', d.surveyTriggerDate],
+    ['Survey App ID', d.surveyAppId],
+    ['Remarks', d.hsRemarks],
+  ]);
+
+  sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderTable(id, rows) {
+  document.getElementById(id).innerHTML = rows.map(([k, v]) =>
+    `<tr><td>${k}</td><td>${v ?? '-'}</td></tr>`
+  ).join('');
+}
+
+// ── DOWNLOAD EXCEL ─────────────────────────────────────────────
+function downloadExcel() {
+  const d = extractedData;
+  if (!d.appId) return;
+
+  const headers = [
+    'App ID','Dealer Name','DVF Visit Date','Lama Usaha (yr)','Stock In Hand',
+    'Kapasitas Parkir','Kepemilikan Lokasi','Avg Penjualan/Bulan','Lokasi Dealer','BM',
+    'Name','Age','Marriage','Current Coll','Current DPD','Highest Coll L24M','Highest DPD L24M',
+    'Value Open Loan (juta)','Has Housing Loan','Ever DPD Auto','Bureau Inquiries',
+    'Bureau Score','Amount Overdue (juta)','Pefindo Result','Pefindo Remarks',
+    'Home Ownership','Length of Stay (yr)','Known by Sources',
+    'Validity Status','Survey Trigger Date','Survey App ID','HS Remarks',
+    'Generated Date'
+  ];
+
+  const row = [
+    d.appId, d.dealerName, d.dvfVisitDate, d.lamaUsaha, d.stockInHand,
+    d.kapasitasParkir, d.kepemilikanLokasi, d.avgPenjualan, d.lokasiDealer, d.bm,
+    d.name, d.age, d.marriage, d.currentColl, d.currentDpd, d.highestCollL24M, d.highestDpdL24M,
+    d.valueOpenLoan, d.hasHousingLoan, d.everDpdAuto, d.bureauInquiries,
+    d.bureauScore, d.amountOverdue, d.pefindoResult, d.pefindoRemarks,
+    d.homeOwnership, d.lengthOfStay, d.knownBySources,
+    d.validityStatus, d.surveyTriggerDate, d.surveyAppId, d.hsRemarks,
+    new Date().toLocaleString('id-ID')
+  ];
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers, row]);
+
+  // Style header row
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let C = range.s.c; C <= range.e.c; C++) {
+    const addr = XLSX.utils.encode_cell({ r: 0, c: C });
+    if (!ws[addr]) continue;
+    ws[addr].s = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '1B3A6B' } } };
+  }
+
+  // Column widths
+  ws['!cols'] = headers.map((h, i) => ({
+    wch: [20,18,14,12,12,12,18,16,12,12,18,6,10,10,10,12,12,16,14,12,14,10,16,14,40,18,12,12,12,14,20,40,18][i] || 14
+  }));
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Scorecard');
+  XLSX.writeFile(wb, `Scorecard_${d.appId}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+</script>
+</body>
+</html>
